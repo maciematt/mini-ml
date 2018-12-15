@@ -6,8 +6,9 @@ prepare_data <- function (X_y) {
   ##   - caret seems to be unable to deal with / autoremove single level factors,
   ##     so also removing those here.
 
-  cols_with_zero_var <- X_y[, -1] %>% nearZeroVar(saveMetrics = T) %>% select(zeroVar) %>% rownames_to_column %>% filter(zeroVar == T) %>% pull(rowname)
-  X_y <- X_y %>% select(-one_of(cols_with_zero_var))
+  # cols_with_zero_var <- X_y[, -1] %>% nearZeroVar(saveMetrics = T) %>% select(zeroVar) %>% rownames_to_column %>% filter(zeroVar == T) %>% pull(rowname)
+  # X_y <- X_y %>% select(-one_of(cols_with_zero_var))
+  ## commenting these two lines above to see if I can add "zv" in preProcess in train instead for the same effect
   colnames(X_y)[1] <- "response"
 
   if (is.integer(X_y$response))
