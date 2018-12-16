@@ -26,7 +26,7 @@ elastic_forest <- list(label = "elastic_forest",
                       )
                     } else {
                       out <- data.frame(alpha = runif(len, min = 0, 1),
-                                        lambda = 2^runif(len, min = -10, 3,
+                                        lambda = 2^runif(len, min = -10, 3),
                                         mtry = unique(sample(1:ncol(x), size = len, replace = TRUE)))
                     }
                     out
@@ -75,10 +75,13 @@ elastic_forest <- list(label = "elastic_forest",
                     out$keep_feats <- keep_feats
                     out
                   },
-                  predict = function(modelFit, newdata, submodels = NULL)
-                    if(!is.null(newdata)) predict(modelFit, newdata %>% select(one_of(modelFit$keep_feats))) else predict(modelFit),
+                  predict = function(modelFit, newdata, submodels = NULL) {
+                      print("predict is on")
+                      if(!is.null(newdata)) predict(modelFit, newdata %>% select(response, one_of(modelFit$keep_feats))) else predict(modelFit)
+                    },
                   prob = function(modelFit, newdata, submodels = NULL)
-                    if(!is.null(newdata)) predict(modelFit, newdata %>% select(one_of(modelFit$keep_feats)), type = "prob") else predict(modelFit, type = "prob"),
+                    if(!is.null(newdata))
+                      predict(modelFit, newdata %>% select(response, one_of(modelFit$keep_feats)), type = "prob") else predict(modelFit, type = "prob"),
                   predictors = function(x, ...) {
                     ## After doing some testing, it looks like randomForest
                     ## will only try to split on plain main effects (instead

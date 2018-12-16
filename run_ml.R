@@ -8,8 +8,8 @@ library(yaml)
 
 # for (i in seq(along = list.files(pattern = "\\.R$")))
 #   source(i)
-pipeline_location <- commandArgs(trailingOnly = F) %>% str_subset("--file=") %>% str_remove("--file=")
-c("transfrom_data.R", "elastic_forest.R") %>% sapply(function (x) {
+pipeline_location <- commandArgs(trailingOnly = F) %>% str_subset("--file=") %>% str_remove("--file=") %>% str_remove("/run_ml.R")
+c("transform_data.R", "elastic_forest.R") %>% sapply(function (x) {
   source(file.path(pipeline_location, x))
 })
 
@@ -19,7 +19,7 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = NULL) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none") {
 
 
   if (parallelization == "local") {
@@ -42,11 +42,15 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   ## Preprocessing full data ##
   #############################
 
-  preprocessing %>% sapply(function (x) {
-    X_y <<- X_y %>% list(
-      "mad_prune_features" = mad_prune_features
-    )[[x]]
-  })
+  print(X_y)
+
+  if (preprocessing != "none") {
+    preprocessing %>% sapply(function (x) {
+      X_y <<- X_y %>% list(
+        "mad_prune_features" = mad_prune_features
+      )[[x]]()
+    })
+  }
 
 
   ###########################################################################
@@ -77,7 +81,7 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
 
   print("about to run caret fit")
-
+  print(X_y)
 
 
   fit_ <- train %>% partial(
@@ -147,11 +151,12 @@ main <- (function () {
   sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up")
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100)
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
-  preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "local")
+  preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5)
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10)
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
 
+  print(paste0("preprocessing:", preprocessing))
 
   ## At this point all data and parameters are ready. As the next step, the method
   ## is ran on the data.

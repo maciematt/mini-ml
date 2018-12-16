@@ -11,7 +11,7 @@ prepare_data <- function (X_y) {
   ## commenting these two lines above to see if I can add "zv" in preProcess in train instead for the same effect
   colnames(X_y)[1] <- "response"
 
-  if (is.integer(X_y$response))
+  if (is.integer(X_y$response) | !is.na(as.integer(as.character(X_y$response))))
     X_y$response <- ifelse(X_y$response == 0, "Zero", "One")
 
   X_y$response <- as.factor(X_y$response)
@@ -28,9 +28,16 @@ mad_prune_features <- function (X_y) {
   ## For example in Dincer et al. 2018.
   ## This works only if all cols (except first) are numeric.
 
-  mean_mad <- X_y[, -1] %>% scale %>% sapply(mad) %>% mean
+  print("Running feature prunning via mean MAD threshold...")
+  mean_mad <- X_y[, -1] %>% preProcess(c("center", "scale")) %>% predict(X_y[, -1]) %>% sapply(mad) %>% mean
+  print("mean MAD:")
+  print(mean_mad)
+
   cols_above_mean_mad <- X_y[, -1] %>% select_if(function (col) mad(col) > mean_mad) %>% colnames
   cols_above_mean_mad <- c(colnames(X_y)[1], cols_above_mean_mad)
+
+  print(paste0("No. cols above mean MAD: ", length(cols_above_mean_mad), " out of total ", ncol(X_y[, -1]), " dependent variable columns."))
+  print(paste0(length(cols_above_mean_mad) / ncol(X_y[, -1]) * 100, "% dependent variable columns have been removed."))
 
   return(X_y[, cols_above_mean_mad])
 
