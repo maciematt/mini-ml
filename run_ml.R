@@ -53,6 +53,7 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   }
 
 
+
   ###########################################################################
   ## Since theoretically all caret methods could be supported here, I'm    ##
   ## using partial functions to accommodate a possible differential number ##
@@ -150,7 +151,6 @@ main <- (function () {
   ## This first part deals with reading in the necessary paramenters and data.
   ## It follows the convention from the rest of the pipeline.
 
-
   args <- commandArgs(trailingOnly = T)
 
   ml_config <- read_yaml(
@@ -168,7 +168,7 @@ main <- (function () {
   sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up")
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100)
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
-  n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, NULL)
+  n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, detectCores())
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
   sbf_method <- ifelse("sbf" %in% names(ml_config), ml_config$sbf, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5)
