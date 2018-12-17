@@ -122,3 +122,44 @@ elastic_forest <- list(label = "elastic_forest",
                     names(out) <- if(x$type == "regression") c("RMSE", "Rsquared") else c("Accuracy", "Kappa")
                     out
                   })
+
+
+
+glmnetSBF <- list(summary = defaultSummary,
+              fit = function(x, y, ...)
+              {
+                if(ncol(x) > 0)
+                {
+                  loadNamespace("glmnet")
+                  glmnet::glmnet(x, y, ...)
+                } else nullModel(y = y)
+              },
+              pred = function(object, x)
+                 {
+                   if(class(object) != "nullModel")
+                   {
+                     tmp <- predict(object, x)
+                     if(object$modelType == "Classification" &
+                          !is.null(object$modelInfo$prob))
+                     {
+                       out <- cbind(data.frame(pred = tmp),
+                                    as.data.frame(predict(object, x, type = "prob")))
+                     } else out <- tmp
+                   } else {
+                     tmp <- predict(object, x)
+                     if(!is.null(object$levels))
+                     {
+                       out <- cbind(data.frame(pred = tmp),
+                                    as.data.frame(predict(object, x, type = "prob")))
+                     } else out <- tmp
+                   }
+                   out
+                 },
+              score = function(fit, x, y)
+              {
+                ## should return a named logical vector
+                if(is.factor(y)) anovaScores(x, y) else gamScores(x, y)
+              },
+              filter = function(score, x, y) score <= 0.05
+)
+

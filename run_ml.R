@@ -19,12 +19,12 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none") {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL) {
 
 
   if (parallelization == "local") {
-    n_cores <- detectCores()
-    registerDoMC(cores = n_cores)
+    n_parallel_cores <- min(n_parallel_cores, detectCores())
+    registerDoMC(cores = n_parallel_cores)
   }
 
   print("about to model in R/caret")
@@ -38,11 +38,11 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     learning_method_name <- elastic_forest
 
 
+
   #############################
   ## Preprocessing full data ##
   #############################
 
-  print(X_y)
 
   if (preprocessing != "none") {
     preprocessing %>% sapply(function (x) {
@@ -80,9 +80,12 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   ## function parameter.
 
 
-  print("about to run caret fit")
-  print(X_y)
+  print("setting up caret fit")
 
+  if (sbf_method != "none") {
+    print(paste0("(running with SBF, using ", sbf_method, ")"))
+    train <- sbf
+  }
 
   fit_ <- train %>% partial(
       response ~ .,
@@ -91,6 +94,18 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
       preProc = c("zv", "center", "scale"),
       metric = "ROC"
   )
+
+  if (sbf_method != "none") {
+    fit_ <- fit_ %>% partial(
+      sbfControl = sbfControl(
+        functions = list(
+          "glmnet_sbf" = glmnetSBF,
+          "lm_sbf" = lmSBF
+        )[[sbf_method]],
+        verbose = T
+      )
+    )
+  }
 
   if (!(learning_method_name %in% c("knn", "gbm")))
     fit_ <- fit_ %>% partial(family = "binomial")
@@ -113,6 +128,8 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
   fit_control <- fit_control_()
   fit_ <- fit_ %>% partial(trControl = fit_control)
+
+  print("running caret fit")
 
   fit <- fit_()
 
@@ -151,18 +168,19 @@ main <- (function () {
   sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up")
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100)
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
+  n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, NULL)
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
+  sbf_method <- ifelse("sbf" %in% names(ml_config), ml_config$sbf, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5)
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10)
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
 
-  print(paste0("preprocessing:", preprocessing))
 
   ## At this point all data and parameters are ready. As the next step, the method
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores)
 
 
   print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
