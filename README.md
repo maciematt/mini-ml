@@ -1,4 +1,4 @@
-* HowTo
+# howto
 
 The pipeline can be ran as follows:
 
