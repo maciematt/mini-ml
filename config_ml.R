@@ -18,6 +18,8 @@ parse_args <- function (args) {
 (main <- function() {
   args <- commandArgs(trailingOnly = T)
   args <- parse_args(args)
+  script_dir <- commandArgs() %>% str_subset("--file") %>% str_remove("--file=") %>% dirname
+  args$pipeline_version <- system(paste0("cd ", script_dir, "; git rev-parse --short HEAD"), intern = TRUE)
   out_file <- ifelse("out" %in% names(args), args$out, "./ml_config.yml")
   sink(out_file)
   cat(as.yaml(args))

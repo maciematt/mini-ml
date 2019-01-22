@@ -19,7 +19,7 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL) {
 
 
   if (parallelization == "local") {
@@ -66,19 +66,16 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
       method = "repeatedcv",
       number = number_folds,
       repeats = number_repeats,
-      summaryFunction = twoClassSummary,
       classProbs = T,
       sampling = sample_balance,
       savePredictions = "all",
       verbose = T
     )
 
-
-  # if (repeats > 1)
-  #   fit_control_ <- fit_control_ %>% partial(repeats = repeats)
-
-  ## repeats are fully covered in this case by sending specific folds into the index
-  ## function parameter.
+  if (learning_type == "binary_classification")
+    fit_control_ <- fit_control_ %>% partial(summaryFunction = twoClassSummary)
+  ## otherwise it defaults to summaryFunction = defaultSummary. Add a else if here if
+  ## you'd like to handle this differently.
 
 
   print("setting up caret fit")
@@ -108,7 +105,7 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     )
   }
 
-  if (!(learning_method_name %in% c("knn", "gbm")))
+  if ((learning_type == "binary_classification") & !(learning_method_name %in% c("knn", "gbm")))
     fit_ <- fit_ %>% partial(family = "binomial")
 
   if (learning_method == "lasso")
@@ -167,6 +164,7 @@ main <- (function () {
 
   sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up")
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100) %>% as.integer
+  learning_type <- ifelse("learning_type" %in% names(ml_config), ml_config$learning_type, "binary_classification")
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
   n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, detectCores()) %>% as.integer
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
@@ -180,7 +178,7 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores)
 
 
   print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))

@@ -30,7 +30,7 @@ local_scores <- function () {
   for (x in 1:length(optimized_filtered))
     optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.rds")
   
-  print(optimized_filtered)
+  #print(optimized_filtered)
   
   roc_data <- optimized_filtered %>% lapply(function (mod) {
     rbind(mod, mod %>% mutate(Resample = "All")) %>% group_by(Resample) %>% do(
@@ -71,7 +71,7 @@ summarize_scores <- function (score_config) {
 (main <- function () {
   
   mode <- commandArgs(trailingOnly = T) %>% str_subset("--mode=") %>% str_remove("--mode=")
-  if (identical(mode, character(0)) || "local" %in% mode)
+  if (identical(mode, character(0)) | "local" %in% mode)
     local_scores()
   else if ("multiple" %in% mode) {
     score_config <- read_yaml(
