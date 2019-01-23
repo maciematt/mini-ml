@@ -1,6 +1,6 @@
 
 
-prepare_data <- function (X_y) {
+prepare_data <- function (X_y, learning_type) {
 
   ## Preparing the data to work with caret.
   ##   - caret seems to be unable to deal with / autoremove single level factors,
@@ -8,13 +8,21 @@ prepare_data <- function (X_y) {
 
   # cols_with_zero_var <- X_y[, -1] %>% nearZeroVar(saveMetrics = T) %>% select(zeroVar) %>% rownames_to_column %>% filter(zeroVar == T) %>% pull(rowname)
   # X_y <- X_y %>% select(-one_of(cols_with_zero_var))
-  ## commenting these two lines above to see if I can add "zv" in preProcess in train instead for the same effect
+  ## commenting these two lines above to see if I can add "zv" in preProcess in train instead for the same effect; apparently I can (as 2 mo later it's still commented out)
   colnames(X_y)[1] <- "response"
 
-  if (is.integer(X_y$response) | !is.na(as.integer(as.character(X_y$response))))
-    X_y$response <- ifelse(X_y$response == 0, "Zero", "One")
+  if (X_y$response %>% as.character %>% as.integer %>% is.na %>% any)
+    stop("NA's detected in the response vector!")
 
-  X_y$response <- as.factor(X_y$response)
+
+  if (learning_type == "binary_classification") {
+
+    if (is.integer(X_y$response)) #| (X_y$response %>% as.character %>% as.integer %>% is.na %>% any %>% `!`))
+      X_y$response <- ifelse(X_y$response == 0, "Zero", "One")
+
+    X_y$response <- as.factor(X_y$response)
+
+  }
 
   return(X_y %>% as_data_frame)
 

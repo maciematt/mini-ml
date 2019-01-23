@@ -154,7 +154,6 @@ main <- (function () {
     ifelse(length(args) == 1, args[1], "./ml_config.yml")
   )
 
-  X_y <- read_delim(ml_config$data, del = "\t") %>% prepare_data
   learning_method <- ml_config$learning_method
 
   log_file <- file(paste0(learning_method, ".log"), open = "wt")
@@ -172,6 +171,9 @@ main <- (function () {
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5) %>% as.integer
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10) %>% as.integer
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
+
+
+  X_y <- read_delim(ml_config$data, del = "\t") %>% prepare_data(learning_type)
 
 
   ## At this point all data and parameters are ready. As the next step, the method
