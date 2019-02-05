@@ -11,13 +11,13 @@ prepare_data <- function (X_y, learning_type) {
   ## commenting these two lines above to see if I can add "zv" in preProcess in train instead for the same effect; apparently I can (as 2 mo later it's still commented out)
   colnames(X_y)[1] <- "response"
 
-  if (X_y$response %>% as.character %>% as.integer %>% is.na %>% any)
+  if (X_y$response %>% is.na %>% any)
     stop("NA's detected in the response vector!")
 
 
   if (learning_type == "binary_classification") {
 
-    if (is.integer(X_y$response)) #| (X_y$response %>% as.character %>% as.integer %>% is.na %>% any %>% `!`))
+    if (is.numeric(X_y$response)) #| (X_y$response %>% is.na %>% any %>% `!`))
       X_y$response <- ifelse(X_y$response == 0, "Zero", "One")
 
     X_y$response <- as.factor(X_y$response)
