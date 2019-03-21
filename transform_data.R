@@ -48,7 +48,7 @@ mad_prune_features <- function (X_y) {
   print(paste0("No. cols above mean MAD: ", length(cols_above_mean_mad), " out of total ", ncol(X_y[, -1]), " dependent variable columns."))
   print(paste0(length(cols_above_mean_mad) / ncol(X_y[, -1]) * 100, "% dependent variable columns will be kept."))
 
-  cols_above_mean_mad <- c(colnames(X_y)[1], cols_above_mean_mad)
+
   return(X_y[, c(response_col, cols_above_mean_mad)])
 
 }
