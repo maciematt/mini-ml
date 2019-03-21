@@ -36,17 +36,19 @@ mad_prune_features <- function (X_y) {
   ## For example in Dincer et al. 2018.
   ## This works only if all cols (except first) are numeric.
 
+  response_col <- colnames(X_y)[1]
+
   print("Running feature prunning via mean MAD threshold...")
   mean_mad <- X_y[, -1] %>% preProcess(c("center", "scale")) %>% predict(X_y[, -1]) %>% sapply(mad) %>% mean
   print("mean MAD:")
   print(mean_mad)
 
-  cols_above_mean_mad <- X_y[, -1] %>% select_if(function (col) mad(col) > mean_mad) %>% colnames
-  cols_above_mean_mad <- c(colnames(X_y)[1], cols_above_mean_mad)
+  cols_above_mean_mad <- X_y[, -1] %>% preProcess(c("center", "scale")) %>% select_if(function (col) mad(col) > mean_mad) %>% colnames
 
   print(paste0("No. cols above mean MAD: ", length(cols_above_mean_mad), " out of total ", ncol(X_y[, -1]), " dependent variable columns."))
   print(paste0(length(cols_above_mean_mad) / ncol(X_y[, -1]) * 100, "% dependent variable columns will be kept."))
 
-  return(X_y[, cols_above_mean_mad])
+  cols_above_mean_mad <- c(colnames(X_y)[1], cols_above_mean_mad)
+  return(X_y[, c(response_col, cols_above_mean_mad)])
 
 }
