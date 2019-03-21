@@ -161,7 +161,7 @@ main <- (function () {
   sink(log_file, type = "message")
 
 
-  sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up")
+  sample_balance <- ifelse("sample_balance" %in% names(ml_config), ml_config$sample_balance, "up") %>% (function (x) {if (x == "none") {x <- NULL}; return (x)})
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100) %>% as.integer
   learning_type <- ifelse("learning_type" %in% names(ml_config), ml_config$learning_type, "binary_classification")
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
