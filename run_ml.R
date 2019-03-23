@@ -185,7 +185,8 @@ main <- (function () {
 
   print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
 
-  saveRDS(optimized_fit, paste0(learning_method, "_model.rds"))
+  #saveRDS(optimized_fit, paste0(learning_method, "_model.rds"))
+  save(optimized_fit, file = paste0(learning_method, "_model.RData"))
 
 
 })()

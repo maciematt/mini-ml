@@ -21,14 +21,20 @@ local_scores <- function () {
   ## Calculates scores in current directory.
   
   
-  to_analyze <- list.files(pattern = "*_model.rds")
+  #to_analyze <- list.files(pattern = "*_model.rds")
+  to_analyze <- list.files(pattern = "*_model.RData")
   
-  models <- to_analyze %>% lapply(function (x) {readRDS(x)})
+  #models <- to_analyze %>% lapply(function (x) {readRDS(x)})
+  models <- to_analyze %>% lapply(function (x) {
+    load(x)
+    return(optimized_fit)
+    })
   optimized_filtered <- models %>% lapply(function (x) filter_proba(x))
   
   
   for (x in 1:length(optimized_filtered))
-    optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.rds")
+    optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.RData")
+    #optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.rds")
   
   #print(optimized_filtered)
   
@@ -52,7 +58,8 @@ local_scores <- function () {
   roc_aucs <- optimized_filtered %>% lapply(function (mod) {
     mod %>% group_by(Resample) %>% summarize(auc = performance(prediction(Zero, obs), measure = "auc")@y.values[[1]])
   })
-  names(roc_aucs) <- to_analyze %>% str_remove("_model.rds")
+  names(roc_aucs) <- to_analyze %>% str_remove("_model.RData")
+  #names(roc_aucs) <- to_analyze %>% str_remove("_model.rds")
   
   
   saveRDS(roc_aucs, "./scores.rds")
