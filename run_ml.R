@@ -1,15 +1,22 @@
 
-library(tidyverse)
+library(dplyr)
+library(readr)
+library(stringr)
+library(rsample)
+library(purrr)
 library(caret)
 library(doMC)
 library(yaml)
+library(future)
+#library(doFuture)
+#library(future.apply)
 
 
 
 # for (i in seq(along = list.files(pattern = "\\.R$")))
 #   source(i)
 pipeline_location <- commandArgs(trailingOnly = F) %>% str_subset("--file=") %>% str_remove("--file=") %>% str_remove("/run_ml.R")
-c("transform_data.R", "elastic_forest.R") %>% sapply(function (x) {
+c("transform_data.R") %>% sapply(function (x) {
   source(file.path(pipeline_location, x))
 })
 
@@ -19,13 +26,12 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL, store_options = NULL) {
 
 
-  if (parallelization == "local") {
-    n_parallel_cores <- min(n_parallel_cores, detectCores())
-    registerDoMC(cores = n_parallel_cores)
-  }
+  #if (parallelization == "local")
+  #  n_parallel_cores <- min(n_parallel_cores, availableCores())
+
 
   print("about to model in R/caret")
 
@@ -52,6 +58,8 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     })
   }
 
+  pre_process <- preProcess(X_y[, -1], c("zv", "center", "scale")) # standard preprocessing; normally it would be handled as part of `train`
+  X_y[, -1] <- predict(pre_process, X_y[, -1])
 
 
   ###########################################################################
@@ -64,11 +72,12 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   fit_control_ <- trainControl %>% 
     partial(
       method = "repeatedcv",
-      number = number_folds,
-      repeats = number_repeats,
+      number = hyper_folds, ## This is the INNER loop where the hyperparameters get optimized
+      #repeats = number_repeats,
       classProbs = T,
       sampling = sample_balance,
       savePredictions = "all",
+      allowParallel = F,
       verbose = T
     )
 
@@ -87,9 +96,8 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
   fit_ <- train %>% partial(
       response ~ .,
-      data = X_y,
       method = learning_method_name,
-      preProc = c("zv", "center", "scale"),
+      #preProc = c("zv", "center", "scale"),
       metric = "ROC"
   )
 
@@ -127,15 +135,51 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   fit_control <- fit_control_()
   fit_ <- fit_ %>% partial(trControl = fit_control)
 
+
+  ## Working out indices for test and train sets
+  train_test_ix <- (X_y %>% vfold_cv(strata = "response", v = number_folds, repeats = number_repeats))$splits %>% 
+    lapply(function(x) {
+      list(train = x$in_id, test = setdiff(1:nrow(X_y), x$in_id), fold_ = x$id$id2, repeat_ = x$id$id)
+    })
+
+
+  ## here the data needs to be split and pumped into fit in a parallelizable loop - gotta figure out what to actually use here
+  if (parallelization == "local") {
+    #plan(multisession, workers = n_parallel_cores)
+    registerDoMC(cores = n_parallel_cores)
+  } else if (parallelization == "lsf") {
+    plan(batchtools_lsf)
+  }
+
+
+
   print("running caret fit")
-
-  fit <- fit_()
-
+  #fits <- future_lapply(train_test_ix, function (ix) {
+  #  fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
+  #  fit <- fit_()
+  #})
+  fits <- foreach(ix = train_test_ix) %dopar% {
+    fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
+    fit <- fit_()
+    prediction <- predict(fit, newdata = X_y[ix$test, ], type = "prob")
+    prediction$predicted <- colnames(prediction)[prediction %>% max.col]
+    prediction$ground_truth <- X_y[ix$test, ] %>% pull(1)
+    variable_importances <- varImp(fit)
+    optimized_hyperparameters <- fit$finalModel$tuneValue
+    if (store_options == "summary")
+      fit <- NULL
+    list(
+      fit = fit,
+      train_test_indices = ix,
+      optimized_hyperparameters = optimized_hyperparameters,
+      prediction = prediction,
+      variable_importances = variable_importances
+    )
+  }
 
   print("caret fit completed")
 
-
-  return(fit)
+  return(fits)
 
 }
 
@@ -165,12 +209,13 @@ main <- (function () {
   tune_length <- ifelse("tune_length" %in% names(ml_config), ml_config$tune_length, 100) %>% as.integer
   learning_type <- ifelse("learning_type" %in% names(ml_config), ml_config$learning_type, "binary_classification")
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
-  n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, detectCores()) %>% as.integer
+  n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, availableCores()) %>% as.integer
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
   sbf_method <- ifelse("sbf" %in% names(ml_config), ml_config$sbf, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5) %>% as.integer
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10) %>% as.integer
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
+  store_options <- ifelse("store_options" %in% names(ml_config), ml_config$store_options, "summary") # don't store the full model by default, only a summary
 
 
   X_y <- read_delim(ml_config$data, del = "\t") %>% prepare_data(learning_type)
@@ -180,13 +225,13 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores, store_options = store_options)
 
 
-  print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
+  #print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
 
-  #saveRDS(optimized_fit, paste0(learning_method, "_model.rds"))
-  save(optimized_fit, file = paste0(learning_method, "_model.RData"))
+  saveRDS(optimized_fit, paste0(learning_method, "_model.rds"))
+  #save(optimized_fit, file = paste0(learning_method, "_model.RData"))
 
 
 })()
