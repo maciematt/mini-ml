@@ -26,7 +26,7 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", sbf_method = "none", n_parallel_cores = NULL, store_options = NULL) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", n_parallel_cores = NULL, store_options = NULL) {
 
 
   #if (parallelization == "local")
@@ -89,10 +89,6 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
   print("setting up caret fit")
 
-  if (sbf_method != "none") {
-    print(paste0("(running with SBF, using ", sbf_method, ")"))
-    train <- sbf
-  }
 
   fit_ <- train %>% partial(
       response ~ .,
@@ -100,18 +96,6 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
       #preProc = c("zv", "center", "scale"),
       metric = "ROC"
   )
-
-  if (sbf_method != "none") {
-    fit_ <- fit_ %>% partial(
-      sbfControl = sbfControl(
-        functions = list(
-          "glmnet_sbf" = glmnetSBF,
-          "lm_sbf" = lmSBF
-        )[[sbf_method]],
-        verbose = T
-      )
-    )
-  }
 
   if ((learning_type == "binary_classification") & !(learning_method_name %in% c("knn", "gbm")))
     fit_ <- fit_ %>% partial(family = "binomial")
@@ -164,8 +148,8 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     prediction <- predict(fit, newdata = X_y[ix$test, ], type = "prob")
     prediction$predicted <- colnames(prediction)[prediction %>% max.col]
     prediction$ground_truth <- X_y[ix$test, ] %>% pull(1)
-    variable_importances <- varImp(fit)
-    optimized_hyperparameters <- fit$finalModel$tuneValue
+    variable_importances <- possibly(varImp, otherwise = NULL)(fit) # svmRadial throws an $ operator in atomic vector error; not sure why, so just making this be NULL whenever varImp can't be computed
+    optimized_hyperparameters <- possibly(function () {fit$finalModel$tuneValue}, NULL)()
     if (store_options == "summary")
       fit <- NULL
     list(
@@ -211,7 +195,6 @@ main <- (function () {
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
   n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, availableCores()) %>% as.integer
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
-  sbf_method <- ifelse("sbf" %in% names(ml_config), ml_config$sbf, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5) %>% as.integer
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10) %>% as.integer
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
@@ -225,7 +208,7 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, sbf_method = sbf_method, n_parallel_cores = n_parallel_cores, store_options = store_options)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, store_options = store_options)
 
 
   #print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
