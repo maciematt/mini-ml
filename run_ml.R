@@ -8,8 +8,10 @@ library(caret)
 library(doMC)
 library(yaml)
 library(future)
-#library(doFuture)
 #library(future.apply)
+
+require(doFuture)
+require(future.batchtools)
 
 
 
@@ -133,6 +135,8 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     registerDoMC(cores = n_parallel_cores)
   } else if (parallelization == "lsf") {
     plan(batchtools_lsf)
+  } else if (parallelization == "slurm") {
+    plan(batchtools_slurm)
   }
 
 
