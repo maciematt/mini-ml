@@ -134,13 +134,13 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     #plan(multisession, workers = n_parallel_cores)
     registerDoMC(cores = n_parallel_cores)
   } else if (parallelization == "lsf") {
-    retisterDoFuture()
+    registerDoFuture()
     if (is.character(parallel_template))
       plan(batchtools_lsf, template = parallel_template)
     else
       plan(batchtools_lsf)
   } else if (parallelization == "slurm") {
-    retisterDoFuture()
+    registerDoFuture()
     if (is.character(parallel_template))
       plan(batchtools_slurm, template = parallel_template)
     else
