@@ -210,6 +210,7 @@ main <- (function () {
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5) %>% as.integer
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10) %>% as.integer
+  hyper_folds <- ifelse("hyper_folds" %in% names(ml_config), ml_config$hyper_folds, 5) %>% as.integer
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
   store_options <- ifelse("store_options" %in% names(ml_config), ml_config$store_options, "summary") # don't store the full model by default, only a summary
 
@@ -221,7 +222,7 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, hyper_folds = hyper_folds, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options)
 
 
   #print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
