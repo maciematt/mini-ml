@@ -6,47 +6,34 @@ library(cowplot)
 
 
 
-filter_proba <- function (fit) {
-  temp <- names(fit$bestTune) %>% 
-    reduce(function (x, y) {
-      x[x[, y] == fit$bestTune[1, y], ]
-    }, .init = fit$pred)
-}
-
-
-
 
 local_scores <- function () {
   
   ## Calculates scores in current directory.
   
+  to_analyze <- list.files(pattern = "*_model.rds")
   
-  #to_analyze <- list.files(pattern = "*_model.rds")
-  to_analyze <- list.files(pattern = "*_model.RData")
+  models <- to_analyze %>% lapply(function (x) {readRDS(x)})
+
+  models_probs <- lapply(1:length(models), function (x) {
+    mods_all <- models[[x]]
+    probs_ <- lapply(1:length(mods_all), function (mod_num) {
+      mods_all[[mod_num]]$prediction %>% mutate(Resample = mod_num, model = to_analyze[x] %>% str_remove("_model.rds"))
+    }) %>% bind_rows
+  })
   
-  #models <- to_analyze %>% lapply(function (x) {readRDS(x)})
-  models <- to_analyze %>% lapply(function (x) {
-    load(x)
-    return(optimized_fit)
-    })
-  optimized_filtered <- models %>% lapply(function (x) filter_proba(x))
   
-  
-  for (x in 1:length(optimized_filtered))
-    optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.RData")
-    #optimized_filtered[[x]]$model <- to_analyze[x] %>% str_remove("_model.rds")
-  
-  #print(optimized_filtered)
-  
-  roc_data <- optimized_filtered %>% lapply(function (mod) {
+  roc_data <- models_probs %>% lapply(function (mod) {
     rbind(mod, mod %>% mutate(Resample = "All")) %>% group_by(Resample) %>% do(
       roc = (function (y) {
-        z <- prediction(y$Zero, y$obs) %>% performance(measure = "tpr", x.measure = "fpr")
+        if ((y$ground_truth %>% unique %>% length) != 2)
+          return(data.frame(x = NA, y = NA))
+        z <- prediction(y$Zero, y$ground_truth) %>% performance(measure = "tpr", x.measure = "fpr") ## as a breakpoint we can check that it looks good after "prediction"
         data.frame(x = z@x.values[[1]], y = z@y.values[[1]])
       })(.)
-    ) %>% unnest %>% mutate(model = mod[1, "model"])
+    ) %>% unnest %>% mutate(model = mod[1, "model"]) %>% drop_na
   }) %>% do.call(rbind, .)
-  
+
   
   g <- ggplot() + facet_wrap(~ model) + geom_abline(linetype = "dashed") + geom_line(data = roc_data %>% filter(Resample != "All"), aes(x = x, y = y, group = Resample), alpha = .2, size = .2) + geom_line(data = roc_data %>% filter(Resample == "All"), aes(x = x, y = y), color = "red") + coord_equal() + theme(legend.position = "none") + xlab("False positive rate") + ylab("True positive rate")
   ggsave("./roc_all.pdf", g)
@@ -55,13 +42,14 @@ local_scores <- function () {
   ggsave("./roc_means.pdf", g)
   
   
-  roc_aucs <- optimized_filtered %>% lapply(function (mod) {
-    mod %>% group_by(Resample) %>% summarize(auc = performance(prediction(Zero, obs), measure = "auc")@y.values[[1]])
+  roc_aucs <- models_probs %>% lapply(function (mod) {
+    mod %>% group_by(Resample) %>%
+    summarize(auc = ifelse((ground_truth %>% unique %>% length) != 2, NA, performance(prediction(Zero, ground_truth), measure = "auc")@y.values[[1]])) %>% drop_na
   })
-  names(roc_aucs) <- to_analyze %>% str_remove("_model.RData")
-  #names(roc_aucs) <- to_analyze %>% str_remove("_model.rds")
+  #names(roc_aucs) <- to_analyze %>% str_remove("_model.RData")
+  names(roc_aucs) <- to_analyze %>% str_remove("_model.rds")
   
-  
+
   saveRDS(roc_aucs, "./scores.rds")
   
 }
@@ -69,14 +57,15 @@ local_scores <- function () {
 
 
 summarize_scores <- function (score_config) {
-  
+  ## FUTURE
+  NULL
 }
 
 
 
 
 (main <- function () {
-  
+
   mode <- commandArgs(trailingOnly = T) %>% str_subset("--mode=") %>% str_remove("--mode=")
   if (identical(mode, character(0)) | "local" %in% mode)
     local_scores()

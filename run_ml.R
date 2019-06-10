@@ -206,7 +206,7 @@ main <- (function () {
   learning_type <- ifelse("learning_type" %in% names(ml_config), ml_config$learning_type, "binary_classification")
   parallelization <- ifelse("parallelization" %in% names(ml_config), ml_config$parallelization, "local")
   n_parallel_cores <- ifelse("n_parallel_cores" %in% names(ml_config), ml_config$n_parallel_cores, availableCores()) %>% as.integer
-  parallel_template <- ifelse("parallel_template" %in% names(ml_config), ml_config$parallel_template, NULL)
+  parallel_template <- ifelse("parallel_template" %in% names(ml_config), ml_config$parallel_template, "none") %>% (function (x) {if (x == "none") {x <- NULL}; return (x)})
   preprocessing <- ifelse("preprocessing" %in% names(ml_config), ml_config$preprocessing, "none")
   number_folds <- ifelse("number_folds" %in% names(ml_config), ml_config$number_folds, 5) %>% as.integer
   number_repeats <- ifelse("number_repeats" %in% names(ml_config), ml_config$number_repeats, 10) %>% as.integer
