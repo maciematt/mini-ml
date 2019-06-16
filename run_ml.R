@@ -28,7 +28,7 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", n_parallel_cores = NULL, parallel_template = NULL, store_options = NULL) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", n_parallel_cores = NULL, parallel_template = NULL, store_options = NULL, simple_mode = F) {
 
 
   #if (parallelization == "local")
@@ -74,7 +74,6 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   fit_control_ <- trainControl %>% 
     partial(
       method = "repeatedcv",
-      number = hyper_folds, ## This is the INNER loop where the hyperparameters get optimized
       #repeats = number_repeats,
       classProbs = T,
       sampling = sample_balance,
@@ -117,16 +116,36 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   }
 
 
+  ## Do we actually have enough samples in either class (bin classification case) to run proper cv?
+  if (!isTRUE(simple_mode) & (learning_type == "binary_classification") & ((X_y %>% pull(response) %>% as.factor %>% table) < number_folds) %>% any) {
+    print("Enforcing simple mode due to small sample size!")
+    simple_mode <- T
+  }
+
+  ## Separate statement in case simple_mode was set from the get-go
+  if (isTRUE(simple_mode))
+    fit_control_ <- fit_control_ %>% partial(number = number_folds)
+  else
+    fit_control_ <- fit_control_ %>% partial(number = hyper_folds) ## This is the INNER loop where the hyperparameters get optimized
+
 
   fit_control <- fit_control_()
   fit_ <- fit_ %>% partial(trControl = fit_control)
 
 
   ## Working out indices for test and train sets
+    
   train_test_ix <- (X_y %>% vfold_cv(strata = "response", v = number_folds, repeats = number_repeats))$splits %>% 
     lapply(function(x) {
       list(train = x$in_id, test = setdiff(1:nrow(X_y), x$in_id), fold_ = x$id$id2, repeat_ = x$id$id)
     })
+  #train_test_ix <- X_y %>% stratify_resample(strata = "response", v = number_folds, repeats = number_repeats) # See log entry from 16/06/2019 for explanation as to why this was abandoned. Enforcing simple mode where necessary instead.
+
+
+  #for (ix in train_test_ix) {
+  #  print(X_y[ix$train, 1:6])
+  #  print(X_y[ix$train, "response"])
+  #}
 
 
   ## here the data needs to be split and pumped into fit in a parallelizable loop - gotta figure out what to actually use here
@@ -154,19 +173,45 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   #  fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
   #  fit <- fit_()
   #})
+
+
+  if (isTRUE(simple_mode))
+    train_test_ix <- 1:number_repeats # this to still possibly get some variety from different hyperparameter paths
+
+
+
+  ## Parallelized loop with `fit`s and `predict`s
   fits <- foreach(ix = train_test_ix) %dopar% {
-    fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
+
+    if (isTRUE(simple_mode))
+      fit_ <- fit_ %>% partial(data = X_y)
+    else
+      fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
+
     fit <- fit_()
-    prediction <- predict(fit, newdata = X_y[ix$test, ], type = "prob")
-    prediction$predicted <- colnames(prediction)[prediction %>% max.col]
-    prediction$ground_truth <- X_y[ix$test, ] %>% pull(1)
+
+    if (isTRUE(simple_mode)) {
+      prediction <- names(fit$bestTune) %>%
+      reduce(function (x, y) {
+        x[x[, y] == fit$bestTune[1, y], ]
+      }, .init = fit$pred)
+      prediction$predicted <- colnames(prediction)[prediction %>% max.col]
+      prediction$ground_truth <- prediction$obs
+    } else {
+      prediction <- predict(fit, newdata = X_y[ix$test, ], type = "prob")
+      prediction$predicted <- colnames(prediction)[prediction %>% max.col]
+      prediction$ground_truth <- X_y[ix$test, ] %>% pull(1)
+    }
+
     variable_importances <- possibly(varImp, otherwise = NULL)(fit) # svmRadial throws an $ operator in atomic vector error; not sure why, so just making this be NULL whenever varImp can't be computed
     optimized_hyperparameters <- possibly(function () {fit$finalModel$tuneValue}, NULL)()
+
     if (store_options == "summary")
       fit <- NULL
     list(
       fit = fit,
       train_test_indices = ix,
+      simple_mode = simple_mode,
       optimized_hyperparameters = optimized_hyperparameters,
       prediction = prediction,
       variable_importances = variable_importances
@@ -213,6 +258,7 @@ main <- (function () {
   hyper_folds <- ifelse("hyper_folds" %in% names(ml_config), ml_config$hyper_folds, 5) %>% as.integer
   search <- ifelse("search" %in% names(ml_config), ml_config$search, "random")
   store_options <- ifelse("store_options" %in% names(ml_config), ml_config$store_options, "summary") # don't store the full model by default, only a summary
+  simple_mode <- ifelse("simple_mode" %in% names(ml_config), ml_config$store_options, F) %>% (function (x) {if (x == "true") {x <- T}; return (x) })
 
 
   X_y <- read_delim(ml_config$data, del = "\t") %>% prepare_data(learning_type)
@@ -222,7 +268,7 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, hyper_folds = hyper_folds, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, hyper_folds = hyper_folds, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options, simple_mode = simple_mode)
 
 
   #print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))

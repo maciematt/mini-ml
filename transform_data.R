@@ -52,3 +52,82 @@ mad_prune_features <- function (X_y) {
   return(X_y[, c(response_col, cols_above_mean_mad)])
 
 }
+
+
+stratify_resample <- function (X_y, strata = "response", v = 5, repeats = 10) {
+  #' Alternative function for deriving stratified folds given a requested number of
+  #' folds, repeats, and a stratifying variable. This approach was developed for instances
+  #' where one of the classes has very few samples, in particular less than v. Unfortu-
+  #' nately, this still fails in the hyperparameter tuning loop.
+
+  s1_rows <- which(X_y[, strata, drop = T] == levels(X_y[, strata, drop = T])[1])
+  if (length(s1_rows) == 1)
+    s1_rows <- c(s1_rows, s1_rows) # This is only to counter a weird behavior of `sample` when passed a single element vector
+  s1_len <- s1_rows %>% length
+
+  s2_rows <- which(X_y[, strata, drop = T] == levels(X_y[, strata, drop = T])[2])
+  if (length(s2_rows) == 1)
+    s2_rows <- c(s2_rows, s2_rows) # This is only to counter a weird behavior of `sample` when passed a single element vector
+  s2_len <- s2_rows %>% length
+
+  if (s1_len < v) {
+    s1_missing <- v - s1_len
+    s1_train <- lapply(1:repeats, function (r_) {
+      s1_surrogate <- c(s1_rows, sample(s1_rows, s1_missing, replace = T))
+      createFolds(s1_surrogate, k = v) %>% 
+        lapply(function (f_) {
+          s1_surrogate[f_]
+        })
+    })
+  } else {
+    s1_train <- lapply(1:repeats, function (r_) {
+      createFolds(s1_rows, k = v) %>% 
+        lapply(function (f_) {
+          s1_rows[f_]
+        })
+    })
+  }
+
+  if (s2_len < v) {
+    s2_missing <- v - s2_len
+    s2_train <- lapply(1:repeats, function (r_) {
+      s2_surrogate <- c(s2_rows, sample(s2_rows, s2_missing, replace = T))
+      createFolds(s2_surrogate, k = v) %>% 
+        lapply(function (f_) {
+          s2_surrogate[f_]
+        })
+    })
+  } else {
+    s2_train <- lapply(1:repeats, function (r_) {
+      createFolds(s2_rows, k = v) %>% 
+        lapply(function (f_) {
+          s2_rows[f_]
+        })
+    })
+  }
+
+  s_train <- lapply(1:repeats, function (r_) {
+    lapply(1:v, function (f_) {
+      c(s1_train[[r_]][[f_]], s2_train[[r_]][[f_]])
+    })
+  })
+  s_test <- lapply(1:repeats, function (r_) {
+    lapply(1:v, function (f_) {
+      setdiff(1:nrow(X_y), s_train[[r_]][[f_]])
+    })
+  })
+
+  combined <- list()
+  for (r_ in 1:repeats) {
+    for (fold_ in 1:v) {
+      combined[[length(combined) + 1]] <- list(
+        train = s_train[[r_]][[fold_]],
+        test = s_test[[r_]][[fold_]],
+        fold_ = paste0("Fold", fold_),
+        repeat_ = paste0("Repeat", r_)
+      )
+    }
+  }
+
+  return(combined)
+}
