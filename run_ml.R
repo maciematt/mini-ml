@@ -28,7 +28,7 @@ set.seed(123)
 
 
 
-run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", n_parallel_cores = NULL, parallel_template = NULL, store_options = NULL, simple_mode = F) {
+run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 10, hyper_folds = 5, learning_type = "binary_classification", parallelization = "local", sample_balance = "up", tune_length = 100, search = "random", preprocessing = "none", n_parallel_cores = NULL, parallel_template = NULL, slurm_resources = NULL, store_options = NULL, simple_mode = F) {
 
 
   #if (parallelization == "local")
@@ -161,7 +161,7 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   } else if (parallelization == "slurm") {
     registerDoFuture()
     if (is.character(parallel_template))
-      plan(batchtools_slurm, template = parallel_template)
+      plan(batchtools_slurm, template = parallel_template, resources = slurm_resources)
     else
       plan(batchtools_slurm)
   }
@@ -260,6 +260,12 @@ main <- (function () {
   store_options <- ifelse("store_options" %in% names(ml_config), ml_config$store_options, "summary") # don't store the full model by default, only a summary
   simple_mode <- ifelse("simple_mode" %in% names(ml_config), ml_config$store_options, F) %>% (function (x) {if (x == "true") {x <- T}; return (x) })
 
+  ## Options specific to slurm parallelization
+  slurm_ncpus <- ifelse("slurm_ncpus" %in% names(ml_config), ml_config$slurm_ncpus, 8) %>% as.integer
+  slurm_walltime <- ifelse("slurm_walltime" %in% names(ml_config), ml_config$slurm_walltime, 360000) %>% as.integer
+  slurm_output <- ifelse("slurm_output" %in% names(ml_config), ml_config$slurm_output, "parallel.log")
+  slurm_resources <- list(ncpus = slurm_ncpus, walltime = slurm_walltime, output = slurm_output)
+
 
   X_y <- read_delim(ml_config$data, del = "\t") %>% prepare_data(learning_type)
 
@@ -268,7 +274,7 @@ main <- (function () {
   ## is ran on the data.
 
 
-  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, hyper_folds = hyper_folds, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options, simple_mode = simple_mode)
+  optimized_fit <- run_caret(X_y, number_folds = number_folds, number_repeats = number_repeats, hyper_folds = hyper_folds, sample_balance = sample_balance, learning_method = learning_method, learning_type = learning_type, parallelization = parallelization, tune_length = tune_length, search = search, preprocessing = preprocessing, n_parallel_cores = n_parallel_cores, parallel_template = parallel_template, store_options = store_options, simple_mode = simple_mode, slurm_resources = slurm_resources)
 
 
   #print(paste0("optimized: ", mean(optimized_fit$resample$ROC), " +/- ", sd(optimized_fit$resample$ROC)))
