@@ -263,7 +263,7 @@ main <- (function () {
   ## Options specific to slurm parallelization
   slurm_ncpus <- ifelse("slurm_ncpus" %in% names(ml_config), ml_config$slurm_ncpus, 8) %>% as.integer
   slurm_walltime <- ifelse("slurm_walltime" %in% names(ml_config), ml_config$slurm_walltime, 360000) %>% as.integer
-  slurm_output <- ifelse("slurm_output" %in% names(ml_config), ml_config$slurm_output, "parallel.log")
+  slurm_output <- ifelse("slurm_output" %in% names(ml_config), ml_config$slurm_output, "/dev/null")
   slurm_resources <- list(ncpus = slurm_ncpus, walltime = slurm_walltime, output = slurm_output)
 
 
