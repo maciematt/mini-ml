@@ -17,8 +17,8 @@ require(future.batchtools)
 
 # for (i in seq(along = list.files(pattern = "\\.R$")))
 #   source(i)
-pipeline_location <- commandArgs(trailingOnly = F) %>% str_subset("--file=") %>% str_remove("--file=") %>% str_remove("/run_ml.R")
-c("transform_data.R") %>% sapply(function (x) {
+pipeline_location <- commandArgs(trailingOnly = F) %>% str_subset("--file=") %>% str_remove("--file=") %>% str_remove("/run-ml.R")
+c("transform-data.R") %>% sapply(function (x) {
   source(file.path(pipeline_location, x))
 })
 
@@ -40,10 +40,11 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
   learning_method_name <- learning_method #%>% str_replace("_caret$", "")
 
-  if (learning_method_name == "lasso")
+  if (learning_method_name == "lasso") {
     learning_method_name <- "glmnet"
-  else if (learning_method_name == "elastic_forest")
+  } else if (learning_method_name == "elastic_forest") {
     learning_method_name <- elastic_forest
+  }
 
 
 
@@ -60,8 +61,14 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     })
   }
 
+  ## If the part below explodes, it's usually because there are NA's. Go fix your data.
   pre_process <- preProcess(X_y[, -1], c("zv", "center", "scale")) # standard preprocessing; normally it would be handled as part of `train`
-  X_y[, -1] <- predict(pre_process, X_y[, -1])
+  # pre_process <- preProcess(X_y[, -1], c("center", "scale")) # standard preprocessing; normally it would be handled as part of `train`
+  # X_y[, -1] <- predict(pre_process, X_y[, -1])
+
+  X_y <- X_y %>% select(1) %>% bind_cols(predict(pre_process, X_y[, -1]))
+  # print(dim(X_y))
+  # print(head(X_y))
 
 
   ###########################################################################
@@ -101,16 +108,17 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   if ((learning_type == "binary_classification") & !(learning_method_name %in% c("knn", "gbm")))
     fit_ <- fit_ %>% partial(family = "binomial")
 
-  if (learning_method == "lasso")
-    if (search == "random")
+  if (learning_method == "lasso") {
+    if (search == "random") {
       fit_ <- fit_ %>% partial(
         tuneGrid = expand.grid(alpha = 1, lambda = 10^runif(tune_length, -3, 2))
       )
-    else
+    } else {
       fit_ <- fit_ %>% partial(
         tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-3, 2, length = tune_length))
       )
-  else {
+    }
+  } else {
     fit_control_ <- fit_control_ %>% partial(search = search)
     fit_ <- fit_ %>% partial(tuneLength = tune_length)
   }
@@ -123,10 +131,11 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   }
 
   ## Separate statement in case simple_mode was set from the get-go
-  if (isTRUE(simple_mode))
+  if (isTRUE(simple_mode)) {
     fit_control_ <- fit_control_ %>% partial(number = number_folds)
-  else
+  } else {
     fit_control_ <- fit_control_ %>% partial(number = hyper_folds) ## This is the INNER loop where the hyperparameters get optimized
+  }
 
 
   fit_control <- fit_control_()
@@ -154,16 +163,18 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
     registerDoMC(cores = n_parallel_cores)
   } else if (parallelization == "lsf") {
     registerDoFuture()
-    if (is.character(parallel_template))
+    if (is.character(parallel_template)) {
       plan(batchtools_lsf, template = parallel_template)
-    else
+    } else {
       plan(batchtools_lsf)
+    }
   } else if (parallelization == "slurm") {
     registerDoFuture()
-    if (is.character(parallel_template))
+    if (is.character(parallel_template)) {
       plan(batchtools_slurm, template = parallel_template, resources = slurm_resources)
-    else
+    } else {
       plan(batchtools_slurm)
+    }
   }
 
 
@@ -183,10 +194,11 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
   ## Parallelized loop with `fit`s and `predict`s
   fits <- foreach(ix = train_test_ix) %dopar% {
 
-    if (isTRUE(simple_mode))
+    if (isTRUE(simple_mode)) {
       fit_ <- fit_ %>% partial(data = X_y)
-    else
+    } else {
       fit_ <- fit_ %>% partial(data = X_y[ix$train, ])
+    }
 
     fit <- fit_()
 
