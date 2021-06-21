@@ -220,6 +220,7 @@ run_caret <- function (X_y, learning_method, number_folds = 5, number_repeats = 
 
     if (store_options == "summary")
       fit <- NULL
+
     list(
       fit = fit,
       train_test_indices = ix,
